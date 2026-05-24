@@ -31,3 +31,24 @@ jobs:
           from spotify_curation.covers import SERIES1_GENERATORS, SERIES2_GENERATORS, upload_cover
           print('All imports OK')
           "
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt
+          pip install pytest
+
+      - name: Run tests
+        env:
+          SPOTIFY_CLIENT_ID: test
+          SPOTIFY_CLIENT_SECRET: test
+        run: python -m pytest tests/ -v
