@@ -1,0 +1,11 @@
+target-version = "py38"
+
+[lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E501",   # line too long — handled by editors
+    "F401",   # unused imports — false positives in __init__.py
+]
+
+[lint.per-file-ignores]
+"scripts/*" = ["E402"]   # sys.path.insert before imports is intentional
