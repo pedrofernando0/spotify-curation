@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-Series 2 — Create 4 mood-based playlists from recommendations.json.
+Series 2 — Create mood-based playlists from recommendations.json.
 Filters against do_not_include.json; max 2 tracks per artist.
 
-Série 2 — Cria 4 playlists por mood a partir de recommendations.json.
-Filtra contra do_not_include.json; máx 2 tracks por artista.
+Moods are defined in recommend_artists.py. Each playlist here pulls all
+artists tagged with a given mood and builds a non-overlapping track selection.
+
+Customize the playlist names, descriptions, and mood keys to match what you
+defined in DISCOVERY_ARTISTS inside recommend_artists.py.
 """
 
 import json
@@ -17,30 +20,36 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import LIBRARY_DIR
 from spotify_curation.client import get_spotify
 
+# ---------------------------------------------------------------------------
+# CUSTOMIZE THIS — one entry per playlist, keyed to a mood from recommend_artists.py.
+#
+# "mood" must match a mood string used in DISCOVERY_ARTISTS.
+# "max_tracks" caps the playlist length.
+# ---------------------------------------------------------------------------
 PLAYLISTS = [
     {
-        "mood":       "concentracao",
-        "name":       "Foco Profundo — Instrumental e Flow",
-        "description":"Post-rock, trip-hop e hip-hop introspectivo. Sem distração.",
-        "max_tracks": 25,
+        "mood":        "focus",
+        "name":        "Focus — Instrumental & Flow",
+        "description": "Post-rock, trip-hop and introspective hip-hop. No distractions.",
+        "max_tracks":  25,
     },
     {
-        "mood":       "energia",
-        "name":       "Ignição — Rock e Rap de Alta Tensão",
-        "description":"Pós-punk, noise rock BR, hip-hop agressivo. Pra ligar o motor.",
-        "max_tracks": 25,
+        "mood":        "energy",
+        "name":        "Energy — High Intensity",
+        "description": "Post-punk, noise rock and aggressive hip-hop.",
+        "max_tracks":  25,
     },
     {
-        "mood":       "noite",
-        "name":       "Madrugada — Peso e Densidade",
-        "description":"Trip-hop, dream pop, rap noturno e rock que respira devagar.",
-        "max_tracks": 25,
+        "mood":        "night",
+        "name":        "Night — Weight & Density",
+        "description": "Trip-hop, dream pop and nocturnal rap.",
+        "max_tracks":  25,
     },
     {
-        "mood":       "viagem",
-        "name":       "Janela Aberta — Pra Rodar",
-        "description":"Rock BR e pós-rock que abre espaço. Pra estrada, pra escapar.",
-        "max_tracks": 25,
+        "mood":        "journey",
+        "name":        "Journey — Open Road",
+        "description": "Post-rock and indie that opens up space.",
+        "max_tracks":  25,
     },
 ]
 
@@ -60,8 +69,8 @@ def load_recommendations():
 
 
 def curate_tracks(recommendations, mood, blocked_ids, max_tracks):
-    eligible    = [r for r in recommendations if mood in r.get("moods", [])]
-    selected    = []
+    eligible     = [r for r in recommendations if mood in r.get("moods", [])]
+    selected     = []
     used_artists = set()
     used_blocked = set(blocked_ids)
 
@@ -129,7 +138,7 @@ def main():
         results.append({"name": pl_def["name"], "id": pl_id, "url": url, "tracks": len(tracks)})
         time.sleep(0.5)
 
-    print("\n=== SUMMARY ===")
+    print("\n=== CREATED PLAYLISTS ===")
     for r in results:
         print(f"  {r['name']}")
         print(f"    {r['url']}")

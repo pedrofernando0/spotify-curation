@@ -1,21 +1,14 @@
 #!/usr/bin/env python3
 """
 Series 2 — Discover artists by category and mood tag.
-Uses search(type=track) to find top tracks per artist (avoids deprecated endpoints
-that require Spotify Extended Quota Mode).
+Uses search(type=track) to find top tracks per artist — avoids deprecated
+endpoints that require Spotify Extended Quota Mode.
 
 Filters out already-known artists (followed or 3+ liked tracks).
 Saves library/recommendations.json for use by create_mood_playlists.py.
 Supports automatic checkpointing: safe to interrupt and re-run.
 
----
-
-Série 2 — Recomenda artistas de descoberta por categoria e mood.
-Usa search(type=track) — endpoints /top-tracks e /recommendations exigem
-Extended Quota no Spotify, search não.
-
-Filtra artistas já conhecidos (seguidos ou 3+ músicas curtidas).
-Suporta checkpoint automático: seguro interromper e re-executar.
+Customize DISCOVERY_ARTISTS below with artists that match YOUR discovery goals.
 """
 
 import json
@@ -30,59 +23,49 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import LIBRARY_DIR
 from spotify_curation.client import get_spotify
 
-# Editorial curation by style proximity + mood mapping.
-# moods: concentracao | energia | noite | viagem
+# ---------------------------------------------------------------------------
+# CUSTOMIZE THIS — editorial list of artists you want to discover.
+#
+# Structure: { "Category Label": [ ("Artist Name", ["mood1", "mood2"]), ... ] }
+#
+# Available moods (used by create_mood_playlists.py to group tracks):
+#   focus | energy | night | journey
+#   (or define your own — just keep them consistent with PLAYLISTS in
+#    create_mood_playlists.py)
+#
+# How artists are filtered automatically:
+#   - Artists you already follow are skipped
+#   - Artists with 3+ liked tracks in your library are skipped
+#   - Tracks already in your library are excluded from results
+#
+# Strategy: pick artists adjacent to your profile that you haven't deeply
+# explored yet. Run export_library.py first to see what you already have.
+# ---------------------------------------------------------------------------
 DISCOVERY_ARTISTS = {
-    "Rock BR": [
-        ("Boogarins",         ["viagem", "concentracao"]),
-        ("Fresno",            ["noite", "energia"]),
-        ("Supercombo",        ["energia", "viagem"]),
-        ("Pato Fu",           ["viagem", "noite"]),
-        ("Bixiga 70",         ["energia", "viagem"]),
-        ("Maglore",           ["noite", "concentracao"]),
-        ("Deafkids",          ["energia", "concentracao"]),
-        ("Cidadão Instigado", ["noite", "concentracao"]),
-        ("Cachorro Grande",   ["energia", "viagem"]),
-        ("Dead Fish",         ["energia"]),
-        ("Plebe Rude",        ["noite", "energia"]),
-        ("Ratos de Porão",    ["energia"]),
-        ("Garage Fuzz",       ["energia", "noite"]),
+    "Category 1 — e.g. Contemporary Hip-Hop": [
+        # Replace with artists you want to explore in this category.
+        # Example artists — adjust popularity/obscurity to your taste:
+        ("Saba",            ["focus", "night"]),
+        ("JID",             ["energy", "night"]),
+        ("Noname",          ["focus", "night"]),
+        ("JPEGMAFIA",       ["energy", "night"]),
+        ("Earl Sweatshirt", ["night", "focus"]),
     ],
-    "Hip-Hop Internacional": [
-        ("Saba",            ["concentracao", "noite"]),
-        ("JID",             ["energia", "noite"]),
-        ("Smino",           ["noite", "concentracao"]),
-        ("Noname",          ["concentracao", "noite"]),
-        ("ScHoolboy Q",     ["energia", "noite"]),
-        ("Earl Sweatshirt", ["noite", "concentracao"]),
-        ("JPEGMAFIA",       ["energia", "noite"]),
-        ("Denzel Curry",    ["energia"]),
-        ("Joey Bada$$",     ["concentracao", "energia"]),
-        ("Ab-Soul",         ["noite", "concentracao"]),
-        ("Aminé",           ["energia", "viagem"]),
-        ("Navy Blue",       ["concentracao", "noite"]),
-        ("billy woods",     ["noite", "concentracao"]),
-        ("Fly Anakin",      ["concentracao", "noite"]),
-        ("Quelle Chris",    ["noite", "concentracao"]),
+    "Category 2 — e.g. Post-Punk / Indie Rock": [
+        # Example artists:
+        ("Fontaines D.C.",   ["energy", "journey"]),
+        ("Shame",            ["energy"]),
+        ("DIIV",             ["night", "focus"]),
+        ("Beach House",      ["night", "focus"]),
+        ("Wolf Alice",       ["energy", "night"]),
     ],
-    "Rock Internacional": [
-        ("Tame Impala",           ["noite", "viagem", "concentracao"]),
-        ("The War on Drugs",      ["viagem", "concentracao"]),
-        ("Beach House",           ["noite", "concentracao"]),
-        ("Portishead",            ["noite", "concentracao"]),
-        ("Massive Attack",        ["noite", "concentracao"]),
-        ("Fontaines D.C.",        ["energia", "viagem"]),
-        ("Shame",                 ["energia"]),
-        ("Yard Act",              ["energia", "noite"]),
-        ("DIIV",                  ["noite", "concentracao"]),
-        ("Squid",                 ["energia", "noite"]),
-        ("Wolf Alice",            ["energia", "noite"]),
-        ("Nothing But Thieves",   ["energia", "noite"]),
-        ("Cigarettes After Sex",  ["noite"]),
-        ("Explosions in the Sky", ["concentracao", "viagem"]),
-        ("Sigur Rós",             ["concentracao", "viagem"]),
-        ("God Is an Astronaut",   ["concentracao", "viagem"]),
-        ("Russian Circles",       ["energia", "concentracao"]),
+    "Category 3 — e.g. Post-Rock / Ambient": [
+        # Example artists:
+        ("Explosions in the Sky", ["focus", "journey"]),
+        ("Sigur Rós",             ["focus", "journey"]),
+        ("Russian Circles",       ["energy", "focus"]),
+        ("God Is an Astronaut",   ["focus", "journey"]),
+        ("Mogwai",                ["night", "focus"]),
     ],
 }
 
@@ -223,33 +206,25 @@ def main():
             with open(output_path, "w") as f:
                 json.dump(list(recommendations.values()), f, ensure_ascii=False, indent=2)
 
-    print("\n\n" + "=" * 62)
-    print("  DISCOVERY RECOMMENDATIONS / RECOMENDAÇÕES DE DESCOBERTA")
-    print("=" * 62)
-
+    print("\n" + "=" * 60)
     for category in DISCOVERY_ARTISTS.keys():
         artists_in_cat = sorted(
             [r for r in recommendations.values() if category in r["categories"]],
             key=lambda x: -x["popularity"],
         )
-        print(f"\n\n{'─' * 62}")
-        print(f"  {category.upper()}  ({len(artists_in_cat)} artists)")
-        print(f"{'─' * 62}")
+        print(f"\n{category}  ({len(artists_in_cat)} artists)")
         for meta in artists_in_cat:
             moods_str = " · ".join(meta["moods"])
-            print(f"\n  {meta['name']}  (pop: {meta['popularity']})  [{moods_str}]")
-            for i, t in enumerate(meta["top_tracks"], 1):
-                print(f"    {i}. {t['name']}")
-                print(f"       {t['uri']}")
+            print(f"  {meta['name']}  (pop: {meta['popularity']})  [{moods_str}]")
 
     mood_counts = defaultdict(int)
     for r in recommendations.values():
         for m in r["moods"]:
             mood_counts[m] += 1
-    print(f"\n\n✓ {len(recommendations)} artists saved to {output_path}")
-    print("\n  Artists per mood:")
+    print(f"\n✓ {len(recommendations)} artists saved to {output_path}")
+    print("\nArtists per mood:")
     for mood, count in sorted(mood_counts.items()):
-        print(f"    {mood}: {count}")
+        print(f"  {mood}: {count}")
 
 
 if __name__ == "__main__":

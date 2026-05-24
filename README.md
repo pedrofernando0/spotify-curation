@@ -1,62 +1,74 @@
 # spotify-curation
 
-> Personalized Spotify playlist curation powered by your own library — no algorithm, no black box.
+**Build Spotify playlists from your own library data — not from recommendations you didn't ask for.**
 
-**[English](#english) · [Português](#português)**
+[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Spotify Web API](https://img.shields.io/badge/Spotify-Web%20API-1DB954?logo=spotify&logoColor=white)](https://developer.spotify.com/documentation/web-api)
+
+---
+
+> **[English](#english)** · **[Português](#português)**
 
 ---
 
 ## English
 
-### What is this?
+### The idea
 
-`spotify-curation` exports your Spotify library and builds curated playlists using **your real listening data as a filter** — every track you've already liked or added is excluded from results, so every playlist is a genuine discovery.
+Spotify's algorithm optimizes for engagement, not discovery. This tool takes a different approach: it exports everything you already own, blocks those tracks permanently, then searches for music from a curated list of artists you define. Every result is something you don't have yet.
 
-It works entirely through the [Spotify Web API](https://developer.spotify.com/documentation/web-api), bypassing the Spotify MCP tool (which doesn't accept specific track URIs) and the deprecated recommendation endpoints (which require Extended Quota Mode).
+No magic, no ML, no black box — just your taste applied as a filter.
 
-### Features
+### How it works
 
-- **Export** your full library: liked songs, followed artists, owned playlists
-- **Curate** genre-based playlists (Series 1) with editorial artist lists
-- **Discover** mood-based playlists (Series 2) with unknown artists filtered by familiarity
-- **Generate** procedural playlist covers via Pillow + NumPy (no design tools needed)
-- **Zero repeats** — `do_not_include.json` blocks every track you already own
+```
+export_library.py           →  library/saved_tracks.json
+                               library/followed_artists.json
+                               library/do_not_include.json   ← blocklist
 
-### Playlists generated
+create_curated_playlists.py →  searches Spotify for each artist in your list
+                               filters against do_not_include.json
+                               creates playlists via Web API
 
-#### Series 1 — Genre-based
+recommend_artists.py        →  filters out artists you already know
+                               finds top tracks per discovery artist
+                               library/recommendations.json  ← with mood tags
 
-| Playlist | Genre |
+create_mood_playlists.py    →  groups recommendations.json by mood
+                               creates one playlist per mood
+
+upload_covers.py / upload_mood_covers.py  →  procedural JPEGs via Pillow
+                                              uploaded via PUT /playlists/{id}/images
+```
+
+### Cover previews
+
+Nine procedural styles, generated with Pillow + NumPy (fixed seed, fully reproducible):
+
+| Style | Aesthetic |
 |---|---|
-| Rap Brasileiro — O Que o Algoritmo Escondeu | Brazilian Rap (underground) |
-| MPB Fundo do Baú | MPB / Samba (rarities) |
-| Rock Alternativo — Além do Que Você Segue | Alternative / Post-punk |
-| Jazz & Fusão Contemporânea | Jazz / Contemporary Fusion |
-| Voz & Silêncio — Folk e Canção Nua | Folk / Acoustic |
+| `rap` | Dark grid, neon geometry |
+| `mpb` | Warm sepia, vinyl rings |
+| `rock` | Purple haze, lightning |
+| `jazz` | Deep blue, club spotlights |
+| `folk` | Watercolor mist, tree silhouettes |
+| `concentracao` | Teal circuit board |
+| `energia` | Red diagonals, high contrast |
+| `noite` | Deep purple, floating particles |
+| `viagem` | Sunset landscape, open road |
 
-#### Series 2 — Mood-based (discovery only)
-
-| Playlist | Mood |
-|---|---|
-| Foco Profundo — Instrumental e Flow | Focus / Concentration |
-| Ignição — Rock e Rap de Alta Tensão | Energy / High intensity |
-| Madrugada — Peso e Densidade | Night / Dense atmosphere |
-| Janela Aberta — Pra Rodar | Journey / Open road |
-
-### Setup
+### Quickstart
 
 **1. Create a Spotify app**
 
-Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), create an app, and add `http://127.0.0.1:8888/callback` as a Redirect URI.
+Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), create an app, and set `http://127.0.0.1:8888/callback` as the Redirect URI.
 
-**2. Clone and configure**
+**2. Configure credentials**
 
 ```bash
-git clone https://github.com/your-username/spotify-curation.git
-cd spotify-curation
-
 cp .env.example .env
-# Edit .env with your credentials
+# Fill in SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET
 ```
 
 **3. Install dependencies**
@@ -65,66 +77,129 @@ cp .env.example .env
 pip install -r requirements.txt
 ```
 
-**4. Authenticate**
-
-The first script run opens a browser for OAuth. The token is cached in `library/.cache` for subsequent runs.
-
-### Usage
+**4. Export your library**
 
 ```bash
-# Step 1 — Export your library (run once, then periodically to keep it fresh)
 python scripts/export_library.py
-
-# Series 1 — Genre-based playlists
-python scripts/create_curated_playlists.py
-python scripts/upload_covers.py          # optional: upload procedural covers
-
-# Series 2 — Mood-based playlists (discovery)
-python scripts/recommend_artists.py      # generates library/recommendations.json
-python scripts/create_mood_playlists.py
-python scripts/upload_mood_covers.py     # optional: upload procedural covers
 ```
 
-> **Tip:** `recommend_artists.py` checkpoints automatically. If it's interrupted, re-running it resumes from where it left off.
+This creates `library/saved_tracks.json`, `library/followed_artists.json`, and `library/do_not_include.json`. The first run opens a browser for OAuth. The token is cached for subsequent runs.
+
+**5. Create playlists**
+
+```bash
+# Series 1 — genre-based (customize artist lists first — see below)
+python scripts/create_curated_playlists.py
+
+# Series 2 — mood-based (customize artist lists first)
+python scripts/recommend_artists.py
+python scripts/create_mood_playlists.py
+```
+
+**6. Upload covers (optional)**
+
+```bash
+# Paste your playlist IDs into upload_covers.py / upload_mood_covers.py first
+python scripts/upload_covers.py
+python scripts/upload_mood_covers.py
+```
+
+### Customizing for your taste
+
+The scripts ship with small example artist lists. Replace them with artists that are **adjacent to your own profile** — similar to what you love, but absent from your library.
+
+#### Finding good candidates
+
+1. Run `export_library.py` and look at your top artists in `saved_tracks.json`
+2. Find artists stylistically close to those — label compilations, music press, Bandcamp tags, etc.
+3. Add them to the lists below
+
+#### Series 1 — `scripts/create_curated_playlists.py`
+
+Edit the `PLAYLISTS` array. Each entry is one Spotify playlist:
+
+```python
+PLAYLISTS = [
+    {
+        "name": "Alternative Rock — Discoveries",
+        "description": "Post-punk and indie I haven't explored yet.",
+        "artists": [
+            "Fontaines D.C.",
+            "Shame",
+            "Squid",
+            "Yard Act",
+            "DIIV",
+        ],
+    },
+    # ... add more playlists
+]
+```
+
+#### Series 2 — `scripts/recommend_artists.py`
+
+Edit `DISCOVERY_ARTISTS`. Each artist gets one or more **mood tags** that determine which playlist it ends up in:
+
+```python
+DISCOVERY_ARTISTS = {
+    "Contemporary Hip-Hop": [
+        ("Saba",      ["focus", "night"]),
+        ("JID",       ["energy", "night"]),
+        ("Noname",    ["focus", "night"]),
+    ],
+    "Post-Rock": [
+        ("Mogwai",    ["focus", "journey"]),
+        ("Sigur Rós", ["focus", "journey"]),
+    ],
+}
+```
+
+Available moods (defined in `create_mood_playlists.py`): `focus` · `energy` · `night` · `journey`
+
+### Spotify API notes
+
+Three endpoints are **deprecated since November 2024** and return `403` for apps without Extended Quota Mode:
+
+| Endpoint | Status |
+|---|---|
+| `GET /artists/{id}/related-artists` | Deprecated |
+| `GET /artists/{id}/top-tracks` | Deprecated |
+| `GET /recommendations` | Deprecated |
+
+This project uses `search(type=track, q="artist:{name}")` instead — available to all apps, returns popularity scores.
 
 ### Project structure
 
 ```
 spotify-curation/
-  scripts/
-    export_library.py            # export full library → library/*.json
-    create_curated_playlists.py  # Series 1: genre playlists
-    upload_covers.py             # Series 1: generate + upload covers
-    recommend_artists.py         # discover artists → library/recommendations.json
-    create_mood_playlists.py     # Series 2: mood playlists
-    upload_mood_covers.py        # Series 2: generate + upload covers
-  spotify_curation/
-    client.py                    # shared Spotify client factory
-    covers.py                    # procedural cover generators + upload utility
-  library/                       # gitignored — populated by export_library.py
-  output/covers/                 # gitignored — populated by upload scripts
-  config.py                      # reads credentials from environment
-  requirements.txt
-  .env.example
+├── scripts/
+│   ├── export_library.py            # Step 1: export your full library
+│   ├── create_curated_playlists.py  # Series 1: genre playlists
+│   ├── upload_covers.py             # Series 1: procedural covers
+│   ├── recommend_artists.py         # Series 2: discover artists by mood
+│   ├── create_mood_playlists.py     # Series 2: mood playlists
+│   └── upload_mood_covers.py        # Series 2: procedural covers
+├── spotify_curation/
+│   ├── client.py                    # shared Spotify client factory
+│   └── covers.py                    # cover generators + upload utility
+├── library/                         # gitignored — generated by export_library.py
+├── output/covers/                   # gitignored — generated by upload scripts
+├── config.py                        # reads credentials from environment
+├── requirements.txt
+└── .env.example
 ```
 
-### API notes
+### Required scopes
 
-These Spotify endpoints require **Extended Quota Mode** (only granted to approved apps) and return `403` for standard apps:
+The OAuth flow requests these scopes automatically:
 
-- `GET /artists/{id}/related-artists` — deprecated Nov 2024
-- `GET /artists/{id}/top-tracks` — deprecated Nov 2024
-- `GET /recommendations` — deprecated Nov 2024
-
-**Workaround used here:** `search(type=track, q="artist:{name}")` — available to all apps, returns `popularity` in results.
-
-### Customizing for your library
-
-The artist lists in `create_curated_playlists.py` and `recommend_artists.py` are **editorial choices** made for one specific listener profile. To adapt them to your own library:
-
-1. Run `export_library.py` to populate `library/saved_tracks.json` and `library/followed_artists.json`
-2. Edit the `PLAYLISTS` and `DISCOVERY_ARTISTS` dictionaries with artists relevant to your profile
-3. The filtering logic (`do_not_include.json`, followed-artist exclusion, 3+ liked tracks threshold) works automatically for any artist list
+| Scope | Used for |
+|---|---|
+| `user-library-read` | Export liked songs |
+| `user-follow-read` | Export followed artists |
+| `playlist-read-private` | Export owned playlists |
+| `playlist-modify-public` | Create and populate playlists |
+| `playlist-modify-private` | Create private playlists |
+| `ugc-image-upload` | Upload playlist covers |
 
 ### License
 
@@ -134,55 +209,45 @@ MIT — see [LICENSE](LICENSE).
 
 ## Português
 
-### O que é isso?
+### A ideia
 
-`spotify-curation` exporta sua biblioteca do Spotify e cria playlists curadas usando **seus dados reais de escuta como filtro** — toda música que você já curtiu ou adicionou é excluída dos resultados, então cada playlist é uma descoberta genuína.
+O algoritmo do Spotify otimiza engajamento, não descoberta. Esta ferramenta tem uma abordagem diferente: exporta tudo que você já possui, bloqueia permanentemente essas faixas e busca música de uma lista de artistas que você define. Cada resultado é algo que você ainda não tem.
 
-Funciona inteiramente pela [Spotify Web API](https://developer.spotify.com/documentation/web-api), contornando o MCP do Spotify (que não aceita URIs de tracks específicos) e os endpoints de recomendação depreciados (que exigem Extended Quota Mode).
+Sem ML, sem caixa-preta — só o seu gosto aplicado como filtro.
 
-### Funcionalidades
+### Como funciona
 
-- **Exporta** sua biblioteca completa: músicas curtidas, artistas seguidos, playlists próprias
-- **Cria** playlists por gênero (Série 1) com listas editoriais de artistas
-- **Descobre** playlists por mood (Série 2) com artistas desconhecidos filtrados por familiaridade
-- **Gera** capas procedurais via Pillow + NumPy (sem ferramentas de design)
-- **Zero repetições** — `do_not_include.json` bloqueia toda track que você já tem
+```
+export_library.py           →  library/saved_tracks.json
+                               library/followed_artists.json
+                               library/do_not_include.json   ← blocklist
 
-### Playlists geradas
+create_curated_playlists.py →  busca no Spotify cada artista da sua lista
+                               filtra contra do_not_include.json
+                               cria playlists via Web API
 
-#### Série 1 — Por gênero
+recommend_artists.py        →  filtra artistas que você já conhece
+                               encontra top tracks por artista de descoberta
+                               library/recommendations.json  ← com tags de mood
 
-| Playlist | Gênero |
-|---|---|
-| Rap Brasileiro — O Que o Algoritmo Escondeu | Rap BR (underground) |
-| MPB Fundo do Baú | MPB / Samba (raridades) |
-| Rock Alternativo — Além do Que Você Segue | Alternativo / Pós-punk |
-| Jazz & Fusão Contemporânea | Jazz / Fusão contemporânea |
-| Voz & Silêncio — Folk e Canção Nua | Folk / Acústico |
+create_mood_playlists.py    →  agrupa recommendations.json por mood
+                               cria uma playlist por mood
 
-#### Série 2 — Por mood (descoberta pura)
+upload_covers.py / upload_mood_covers.py  →  JPEGs procedurais via Pillow
+                                              enviados via PUT /playlists/{id}/images
+```
 
-| Playlist | Mood |
-|---|---|
-| Foco Profundo — Instrumental e Flow | Foco / Concentração |
-| Ignição — Rock e Rap de Alta Tensão | Energia / Alta intensidade |
-| Madrugada — Peso e Densidade | Noite / Atmosfera densa |
-| Janela Aberta — Pra Rodar | Viagem / Estrada aberta |
-
-### Setup
+### Início rápido
 
 **1. Criar um app no Spotify**
 
 Acesse o [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), crie um app e adicione `http://127.0.0.1:8888/callback` como Redirect URI.
 
-**2. Clonar e configurar**
+**2. Configurar credenciais**
 
 ```bash
-git clone https://github.com/seu-usuario/spotify-curation.git
-cd spotify-curation
-
 cp .env.example .env
-# Edite .env com suas credenciais
+# Preencha SPOTIFY_CLIENT_ID e SPOTIFY_CLIENT_SECRET
 ```
 
 **3. Instalar dependências**
@@ -191,66 +256,111 @@ cp .env.example .env
 pip install -r requirements.txt
 ```
 
-**4. Autenticar**
-
-Na primeira execução, um navegador abrirá para o fluxo OAuth. O token é cacheado em `library/.cache` para execuções subsequentes.
-
-### Como usar
+**4. Exportar sua biblioteca**
 
 ```bash
-# Passo 1 — Exportar sua biblioteca (rodar uma vez, depois periodicamente)
 python scripts/export_library.py
-
-# Série 1 — Playlists por gênero
-python scripts/create_curated_playlists.py
-python scripts/upload_covers.py          # opcional: sobe capas procedurais
-
-# Série 2 — Playlists por mood (descoberta)
-python scripts/recommend_artists.py      # gera library/recommendations.json
-python scripts/create_mood_playlists.py
-python scripts/upload_mood_covers.py     # opcional: sobe capas procedurais
 ```
 
-> **Dica:** `recommend_artists.py` faz checkpoint automático. Se for interrompido, basta re-executar que ele retoma de onde parou.
+Cria `library/saved_tracks.json`, `library/followed_artists.json` e `library/do_not_include.json`. Na primeira execução, abre o navegador para OAuth. O token é cacheado para execuções seguintes.
+
+**5. Criar playlists**
+
+```bash
+# Série 1 — por gênero (personalize as listas de artistas primeiro)
+python scripts/create_curated_playlists.py
+
+# Série 2 — por mood (personalize as listas de artistas primeiro)
+python scripts/recommend_artists.py
+python scripts/create_mood_playlists.py
+```
+
+**6. Subir capas (opcional)**
+
+```bash
+# Cole os IDs das suas playlists em upload_covers.py / upload_mood_covers.py antes
+python scripts/upload_covers.py
+python scripts/upload_mood_covers.py
+```
+
+### Personalizando para o seu gosto
+
+Os scripts incluem listas de artistas de exemplo. Substitua-os por artistas **adjacentes ao seu perfil** — similares ao que você ama, mas ausentes da sua biblioteca.
+
+#### Encontrando bons candidatos
+
+1. Rode `export_library.py` e veja seus artistas mais frequentes em `saved_tracks.json`
+2. Encontre artistas estilisticamente próximos — compilações de selos, imprensa musical, tags do Bandcamp, etc.
+3. Adicione-os nas listas abaixo
+
+#### Série 1 — `scripts/create_curated_playlists.py`
+
+Edite o array `PLAYLISTS`. Cada entrada é uma playlist no Spotify:
+
+```python
+PLAYLISTS = [
+    {
+        "name": "Rock Alternativo — Descobertas",
+        "description": "Pós-punk e indie que ainda não explorei.",
+        "artists": [
+            "Fontaines D.C.",
+            "Shame",
+            "Squid",
+        ],
+    },
+]
+```
+
+#### Série 2 — `scripts/recommend_artists.py`
+
+Edite `DISCOVERY_ARTISTS`. Cada artista recebe uma ou mais **tags de mood** que determinam em qual playlist ele aparece:
+
+```python
+DISCOVERY_ARTISTS = {
+    "Hip-Hop Contemporâneo": [
+        ("Saba",   ["focus", "night"]),
+        ("JID",    ["energy", "night"]),
+    ],
+    "Pós-Rock": [
+        ("Mogwai", ["focus", "journey"]),
+    ],
+}
+```
+
+Moods disponíveis (definidos em `create_mood_playlists.py`): `focus` · `energy` · `night` · `journey`
+
+### Notas sobre a API Spotify
+
+Três endpoints estão **depreciados desde novembro de 2024** e retornam `403` para apps sem Extended Quota Mode:
+
+| Endpoint | Status |
+|---|---|
+| `GET /artists/{id}/related-artists` | Depreciado |
+| `GET /artists/{id}/top-tracks` | Depreciado |
+| `GET /recommendations` | Depreciado |
+
+Este projeto usa `search(type=track, q="artist:{nome}")` — disponível para todos os apps, retorna scores de popularidade.
 
 ### Estrutura do projeto
 
 ```
 spotify-curation/
-  scripts/
-    export_library.py            # exporta biblioteca → library/*.json
-    create_curated_playlists.py  # Série 1: playlists por gênero
-    upload_covers.py             # Série 1: gera + sobe capas
-    recommend_artists.py         # descobre artistas → library/recommendations.json
-    create_mood_playlists.py     # Série 2: playlists por mood
-    upload_mood_covers.py        # Série 2: gera + sobe capas
-  spotify_curation/
-    client.py                    # factory do cliente Spotify compartilhado
-    covers.py                    # geradores de capa procedural + utilitário de upload
-  library/                       # gitignored — populado por export_library.py
-  output/covers/                 # gitignored — populado pelos scripts de capas
-  config.py                      # lê credenciais das variáveis de ambiente
-  requirements.txt
-  .env.example
+├── scripts/
+│   ├── export_library.py            # Passo 1: exportar biblioteca completa
+│   ├── create_curated_playlists.py  # Série 1: playlists por gênero
+│   ├── upload_covers.py             # Série 1: capas procedurais
+│   ├── recommend_artists.py         # Série 2: descobrir artistas por mood
+│   ├── create_mood_playlists.py     # Série 2: playlists por mood
+│   └── upload_mood_covers.py        # Série 2: capas procedurais
+├── spotify_curation/
+│   ├── client.py                    # factory do cliente Spotify
+│   └── covers.py                    # geradores de capa + utilitário de upload
+├── library/                         # gitignored — gerado por export_library.py
+├── output/covers/                   # gitignored — gerado pelos scripts de capas
+├── config.py                        # lê credenciais das variáveis de ambiente
+├── requirements.txt
+└── .env.example
 ```
-
-### Notas sobre a API
-
-Estes endpoints do Spotify exigem **Extended Quota Mode** (concedido só a apps aprovados) e retornam `403` para apps padrão:
-
-- `GET /artists/{id}/related-artists` — depreciado Nov 2024
-- `GET /artists/{id}/top-tracks` — depreciado Nov 2024
-- `GET /recommendations` — depreciado Nov 2024
-
-**Workaround usado aqui:** `search(type=track, q="artist:{nome}")` — disponível para todos os apps, retorna `popularity` nos resultados.
-
-### Adaptando para sua biblioteca
-
-As listas de artistas em `create_curated_playlists.py` e `recommend_artists.py` são **escolhas editoriais** feitas para um perfil específico de ouvinte. Para adaptar ao seu:
-
-1. Rode `export_library.py` para popular `library/saved_tracks.json` e `library/followed_artists.json`
-2. Edite os dicionários `PLAYLISTS` e `DISCOVERY_ARTISTS` com artistas relevantes ao seu perfil
-3. A lógica de filtro (`do_not_include.json`, exclusão de artistas seguidos, limiar de 3+ tracks curtidas) funciona automaticamente para qualquer lista
 
 ### Licença
 
